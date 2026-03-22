@@ -390,10 +390,32 @@ CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
 
+/* Force light mode */
+:root, .dark, .gradio-container, .gradio-container.dark {
+    --body-background-fill: #f3f2ef !important;
+    --body-text-color: #191919 !important;
+    --block-background-fill: white !important;
+    --block-border-color: #e8e7e4 !important;
+    --block-label-text-color: #333 !important;
+    --block-title-text-color: #191919 !important;
+    --input-background-fill: #fafafa !important;
+    --neutral-50: #fafafa !important;
+    --neutral-100: #f5f5f5 !important;
+    --neutral-200: #e5e5e5 !important;
+    --neutral-300: #d4d4d4 !important;
+    --neutral-400: #a3a3a3 !important;
+    --neutral-500: #737373 !important;
+    --neutral-600: #525252 !important;
+    --neutral-700: #404040 !important;
+    --neutral-800: #262626 !important;
+    --neutral-900: #171717 !important;
+    color-scheme: light !important;
+}
+
 /* Layout */
 .gradio-container {
     max-width: 680px !important; margin: 0 auto !important;
-    background: #f3f2ef !important;
+    background: #f3f2ef !important; color: #191919 !important;
 }
 footer { display: none !important; }
 
@@ -482,19 +504,24 @@ THEME = gr.themes.Default(
     neutral_hue="gray",
     font=("Inter", "system-ui", "sans-serif"),
 ).set(
-    body_background_fill="#f3f2ef",
-    body_text_color="#191919",
-    block_background_fill="white",
-    block_border_color="#e8e7e4",
-    block_border_width="1px",
-    block_shadow="0 1px 2px rgba(0,0,0,.06)",
+    body_background_fill="#f3f2ef", body_background_fill_dark="#f3f2ef",
+    body_text_color="#191919", body_text_color_dark="#191919",
+    block_background_fill="white", block_background_fill_dark="white",
+    block_border_color="#e8e7e4", block_border_color_dark="#e8e7e4",
+    block_border_width="1px", block_border_width_dark="1px",
+    block_shadow="0 1px 2px rgba(0,0,0,.06)", block_shadow_dark="0 1px 2px rgba(0,0,0,.06)",
     block_radius="10px",
-    block_label_text_color="#333",
-    block_label_background_fill="transparent",
-    input_background_fill="#fafafa",
-    input_border_color="#ddd",
-    button_primary_background_fill="#0a66c2",
-    button_primary_text_color="white",
+    block_label_text_color="#333", block_label_text_color_dark="#333",
+    block_label_background_fill="transparent", block_label_background_fill_dark="transparent",
+    block_title_text_color="#191919", block_title_text_color_dark="#191919",
+    input_background_fill="#fafafa", input_background_fill_dark="#fafafa",
+    input_border_color="#ddd", input_border_color_dark="#ddd",
+    input_placeholder_color="#999", input_placeholder_color_dark="#999",
+    button_primary_background_fill="#0a66c2", button_primary_background_fill_dark="#0a66c2",
+    button_primary_background_fill_hover="#004182", button_primary_background_fill_hover_dark="#004182",
+    button_primary_text_color="white", button_primary_text_color_dark="white",
+    border_color_accent="#0a66c2", border_color_accent_dark="#0a66c2",
+    color_accent_soft="#eef3f8", color_accent_soft_dark="#eef3f8",
 )
 
 
