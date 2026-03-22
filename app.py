@@ -373,13 +373,15 @@ def process_resume(resume_file, job_url, job_desc_manual):
 
     yield report + "\n\n---\n*Creating PDF...*", optimized_md, None
     try:
-        pdf_path = tempfile.mktemp(suffix=".pdf")
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf", prefix="optimized_resume_")
+        pdf_path = tmp.name
+        tmp.close()
         markdown_to_pdf(optimized_md, pdf_path)
     except Exception as e:
         yield report + f"\n\nPDF error: {e}", optimized_md, None
         return
 
-    yield report + "\n\n---\n**Your optimized resume is ready below.**", optimized_md, pdf_path
+    yield report + "\n\n---\n**Your optimized resume is ready. Open the Optimized Resume section below to copy or download it.**", optimized_md, pdf_path
 
 
 # ═════════════════════════════════════════════════════════════════════════════
