@@ -368,50 +368,87 @@ def process_resume(resume_file, job_url, job_desc_manual):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  GRADIO UI — LinkedIn-inspired
+#  GRADIO UI — LinkedIn-inspired, single-column
 # ═════════════════════════════════════════════════════════════════════════════
 
 CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 * { font-family: 'Inter', -apple-system, system-ui, sans-serif !important; }
-.gradio-container { max-width: 1080px !important; margin: 0 auto !important; background: #f4f2ee !important; padding: 0 !important; }
+
+/* Layout */
+.gradio-container { max-width: 760px !important; margin: 0 auto !important; background: #f4f2ee !important; }
 footer { display: none !important; }
 
-/* Header */
-.hdr { background: white; padding: 16px 24px; border-bottom: 1px solid #ddd; display: flex; align-items: center; gap: 14px; margin: 0 0 12px 0; border-radius: 0 0 8px 8px; }
-.hdr-icon { width: 40px; height: 40px; background: #0a66c2; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 20px; flex-shrink: 0; }
-.hdr h1 { font-size: 1.15rem !important; font-weight: 600 !important; color: #191919 !important; margin: 0 !important; line-height: 1.3; }
+/* Header card */
+.hdr {
+    background: white; padding: 20px 24px; border: 1px solid #e0dfdc; border-radius: 8px;
+    display: flex; align-items: center; gap: 14px; margin-bottom: 8px;
+}
+.hdr-icon {
+    width: 44px; height: 44px; background: #0a66c2; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 22px; flex-shrink: 0;
+}
+.hdr h1 { font-size: 1.15rem !important; font-weight: 600 !important; color: #191919 !important; margin: 0 !important; }
 .hdr p { font-size: 0.8rem; color: #666; margin: 2px 0 0; }
 
-/* Banner */
-.banner { background: #eef3f8; border: 1px solid #d0e0f0; border-radius: 8px; padding: 12px 18px; font-size: 0.84rem; color: #333; margin: 0 0 12px; line-height: 1.5; }
-.banner b { color: #0a66c2; }
+/* Info strip */
+.info {
+    background: white; border: 1px solid #e0dfdc; border-radius: 8px;
+    padding: 12px 18px; font-size: 0.82rem; color: #444; margin-bottom: 8px; line-height: 1.5;
+}
+.info b { color: #0a66c2; }
 
-/* Cards */
+/* Override all Gradio blocks */
 .block { background: white !important; border: 1px solid #e0dfdc !important; border-radius: 8px !important; }
 
+/* Labels — force dark color */
+label, .label-wrap, .label-wrap span, span[data-testid="block-label"] {
+    color: #444 !important; font-weight: 500 !important; font-size: 0.84rem !important;
+    background: transparent !important;
+}
+/* Kill the colored label pill that Gradio adds */
+.label-wrap .block-label, .gradio-file .label-wrap span, .file-preview .label-wrap {
+    background: transparent !important; color: #444 !important;
+}
+
 /* Buttons */
-button.primary { background: #0a66c2 !important; border: none !important; border-radius: 20px !important; font-weight: 600 !important; padding: 10px 24px !important; }
+button.primary {
+    background: #0a66c2 !important; border: none !important; border-radius: 24px !important;
+    font-weight: 600 !important; padding: 12px 32px !important; font-size: 0.92rem !important;
+    width: 100% !important; max-width: 280px !important; margin: 4px auto !important; display: block !important;
+}
 button.primary:hover { background: #004182 !important; }
 
 /* Inputs */
-input, textarea { border-color: #ddd !important; border-radius: 6px !important; }
+input, textarea { border: 1px solid #ddd !important; border-radius: 8px !important; background: white !important; color: #191919 !important; }
 input:focus, textarea:focus { border-color: #0a66c2 !important; box-shadow: 0 0 0 1px #0a66c2 !important; }
-label, .label-wrap span { color: #333 !important; font-weight: 500 !important; font-size: 0.85rem !important; }
+textarea { min-height: 80px !important; }
+
+/* Upload area */
+.upload-button { border: 2px dashed #d0d0d0 !important; border-radius: 8px !important; background: #fafafa !important; }
+.file-preview { background: white !important; }
 
 /* Tables */
-table thead th { background: #f8f8f6 !important; color: #191919 !important; font-weight: 600 !important; font-size: 0.82rem !important; }
-table tbody td { color: #333 !important; font-size: 0.82rem !important; background: white !important; }
-table tbody tr:hover td { background: #f5f5f2 !important; }
+table { border-collapse: collapse !important; width: 100% !important; font-size: 0.82rem !important; }
+table thead th { background: #f8f8f6 !important; color: #191919 !important; font-weight: 600 !important; padding: 8px 12px !important; border-bottom: 2px solid #e0dfdc !important; }
+table tbody td { color: #333 !important; padding: 7px 12px !important; background: white !important; border-bottom: 1px solid #f0efec !important; }
+table tbody tr:hover td { background: #f8f8f6 !important; }
 
-/* Markdown */
-.prose, .markdown-text { color: #333 !important; font-size: 0.88rem !important; line-height: 1.55 !important; }
+/* Markdown report */
+.prose, .markdown-text { color: #333 !important; font-size: 0.88rem !important; line-height: 1.6 !important; }
 .prose strong { color: #191919 !important; }
-.prose h2 { color: #191919 !important; font-size: 1.1rem !important; border-bottom: 1px solid #eee; padding-bottom: 6px; }
-.prose h3 { color: #191919 !important; font-size: 0.95rem !important; }
+.prose h2 { color: #191919 !important; font-size: 1.08rem !important; margin-top: 16px !important; padding-bottom: 6px; border-bottom: 1px solid #eee; }
+.prose h3 { color: #191919 !important; font-size: 0.94rem !important; margin-top: 12px !important; }
+.prose hr { border-color: #e8e8e5 !important; margin: 12px 0 !important; }
+
+/* Accordion */
+.label-wrap { cursor: pointer; }
 
 /* Footer */
-.ft { background: white; border-top: 1px solid #e0dfdc; border-radius: 0 0 8px 8px; text-align: center; font-size: 0.75rem; color: #999; padding: 12px; margin-top: 12px; }
+.ft {
+    text-align: center; font-size: 0.73rem; color: #999; padding: 14px 0 6px;
+}
 .ft a { color: #0a66c2; text-decoration: none; }
 """
 
@@ -424,7 +461,8 @@ THEME = gr.themes.Base(
     body_text_color="#191919", body_text_color_dark="#191919",
     block_background_fill="white", block_background_fill_dark="white",
     block_border_color="#e0dfdc", block_border_color_dark="#e0dfdc",
-    block_label_text_color="#666", block_label_text_color_dark="#666",
+    block_label_text_color="#444", block_label_text_color_dark="#444",
+    block_label_background_fill="transparent", block_label_background_fill_dark="transparent",
     input_background_fill="white", input_background_fill_dark="white",
     input_border_color="#ddd", input_border_color_dark="#ddd",
     button_primary_background_fill="#0a66c2", button_primary_background_fill_dark="#0a66c2",
@@ -432,30 +470,54 @@ THEME = gr.themes.Base(
     button_primary_text_color="white", button_primary_text_color_dark="white",
 )
 
+
 with gr.Blocks(theme=THEME, css=CSS, title="ATS Resume Optimizer") as demo:
 
-    gr.HTML("""<div class="hdr"><div class="hdr-icon">R</div><div><h1>Resume Optimizer</h1><p>ATS-optimized resumes powered by Llama 3.1-70B + Sentence-Transformers</p></div></div>""")
-    gr.HTML("""<div class="banner"><b>How it works:</b> Upload your resume PDF + paste a job description. We score ATS keyword matches (60%) + semantic similarity (40%), then rewrite your resume to maximize your match. <b>We never invent skills or experience.</b></div>""")
+    # ── Header ──
+    gr.HTML("""
+    <div class="hdr">
+        <div class="hdr-icon">R</div>
+        <div>
+            <h1>Resume Optimizer</h1>
+            <p>ATS-optimized resumes · Llama 3.1-70B + Sentence-Transformers</p>
+        </div>
+    </div>
+    """)
 
-    with gr.Row(equal_height=False):
-        with gr.Column(scale=2, min_width=320):
+    gr.HTML("""
+    <div class="info">
+        <b>How it works:</b> Upload your resume + paste a job description.
+        We score keyword match (60%) + semantic similarity (40%), then rewrite your resume to maximize ATS compatibility.
+        <b>We never invent skills or experience.</b>
+    </div>
+    """)
+
+    # ── Input card ──
+    with gr.Row():
+        with gr.Column(scale=1):
             resume_input = gr.File(label="Resume (PDF)", file_types=[".pdf"], type="filepath")
-            job_desc_input = gr.Textbox(label="Job Description", placeholder="Paste the full job description here...", lines=8)
-            job_url_input = gr.Textbox(label="Job URL (optional fallback)", placeholder="https://...", lines=1)
-            submit_btn = gr.Button("Analyze & Optimize", variant="primary", size="lg")
+        with gr.Column(scale=2):
+            job_desc_input = gr.Textbox(label="Job Description", placeholder="Paste the full job description here...", lines=6)
 
-        with gr.Column(scale=3):
-            report_output = gr.Markdown(value="Upload your resume and paste a job description to get started.")
+    with gr.Accordion("Have a job URL instead?", open=False):
+        job_url_input = gr.Textbox(label="Job Posting URL", placeholder="https://careers.example.com/job/12345", lines=1)
 
-    with gr.Row(visible=True):
-        with gr.Column(scale=1):
-            md_output = gr.Textbox(label="Optimized Resume (Markdown)", lines=16, show_copy_button=True, interactive=True)
-        with gr.Column(scale=1):
-            pdf_output = gr.File(label="Download Optimized PDF")
+    submit_btn = gr.Button("Analyze & Optimize", variant="primary", size="lg")
 
-    submit_btn.click(fn=process_resume, inputs=[resume_input, job_url_input, job_desc_input], outputs=[report_output, md_output, pdf_output])
+    # ── Results ──
+    report_output = gr.Markdown(value="*Results will appear here after analysis.*")
 
-    gr.HTML("""<div class="ft">Built by <a href="https://danielregaladoumiami.github.io/portfolio/">Daniel Regalado</a> · University of Miami · <a href="https://github.com/DanielRegaladoUMiami/ats-resume-optimizer">GitHub</a></div>""")
+    with gr.Accordion("Optimized Resume", open=False):
+        md_output = gr.Textbox(label="Markdown (editable)", lines=14, show_copy_button=True, interactive=True)
+        pdf_output = gr.File(label="Download PDF")
+
+    submit_btn.click(
+        fn=process_resume,
+        inputs=[resume_input, job_url_input, job_desc_input],
+        outputs=[report_output, md_output, pdf_output],
+    )
+
+    gr.HTML('<div class="ft">Built by <a href="https://danielregaladoumiami.github.io/portfolio/">Daniel Regalado</a> · University of Miami · <a href="https://github.com/DanielRegaladoUMiami/ats-resume-optimizer">GitHub</a></div>')
 
 if __name__ == "__main__":
     demo.launch()
