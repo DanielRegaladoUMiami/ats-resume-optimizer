@@ -21,11 +21,11 @@ from huggingface_hub import InferenceClient
 from sentence_transformers import SentenceTransformer, util
 import pdfplumber
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.colors import HexColor
+from reportlab.lib.colors import HexColor, Color
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 
 
 # ─── Config ──────────────────────────────────────────────────────────────────
@@ -170,8 +170,30 @@ RULES:
 - Rephrase bullets to naturally include target keywords where truthful
 - Mirror the job description's terminology
 - For missing keywords: if the candidate has RELATED experience, reframe it to be closer
-- Keep 1-2 pages, clean Markdown: # Name, ## Sections, ### Roles, - bullets
-- Add a "Skills" section near the top with relevant keywords the candidate actually has"""
+- Keep 1-2 pages
+
+MARKDOWN FORMAT (strict):
+  # Full Name
+  contact info line (phone | email | linkedin)
+  ## Skills
+  - Skill1
+  - Skill2
+  ## Experience
+  #### Company Name, City, State/Country
+  ##### Job Title, Start Date – End Date
+  - Achievement bullet
+  ## Education
+  #### University Name, City, State
+  ##### Degree, Graduation Date
+  ## Projects (if applicable)
+  ### Project Name
+  - Description bullet
+  ## Technical Skills (if separate from Skills)
+  - Category: item1, item2, item3
+  ## Certifications
+  - Certification name
+
+IMPORTANT: Use exactly these heading levels. # for name, ## for sections, ### for sub-groups, #### for company/school, ##### for title/degree. Use - for all bullets."""
 
     user_msg = f"""TARGET: {analysis.get('job_title', 'N/A')} at {analysis.get('company', 'N/A')}
 MATCHED KEYWORDS: {json.dumps(kw_found)}
@@ -194,32 +216,150 @@ Write the optimized resume in Markdown now."""
 # ═════════════════════════════════════════════════════════════════════════════
 
 def markdown_to_pdf(md: str, path: str):
-    doc = SimpleDocTemplate(path, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch, leftMargin=0.6*inch, rightMargin=0.6*inch)
+    NAVY = HexColor("#1a1a2e")
+    DARK = HexColor("#222222")
+    MED = HexColor("#444444")
+    LIGHT = HexColor("#666666")
+
+    doc = SimpleDocTemplate(path, pagesize=letter,
+        topMargin=0.45*inch, bottomMargin=0.45*inch,
+        leftMargin=0.55*inch, rightMargin=0.55*inch)
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle("RName", parent=styles["Title"], fontSize=18, leading=22, textColor=HexColor("#1a1a2e"), spaceAfter=4, alignment=TA_CENTER))
-    styles.add(ParagraphStyle("RContact", parent=styles["Normal"], fontSize=9, leading=12, textColor=HexColor("#555"), alignment=TA_CENTER, spaceAfter=10))
-    styles.add(ParagraphStyle("RSec", parent=styles["Heading2"], fontSize=12, leading=15, textColor=HexColor("#1a1a2e"), spaceBefore=12, spaceAfter=4))
-    styles.add(ParagraphStyle("RBullet", parent=styles["Normal"], fontSize=10, leading=13, leftIndent=18, bulletIndent=6, spaceBefore=1, spaceAfter=1, alignment=TA_JUSTIFY))
-    styles.add(ParagraphStyle("RSub", parent=styles["Normal"], fontSize=10, leading=13, textColor=HexColor("#333"), spaceBefore=6, spaceAfter=2))
-    styles.add(ParagraphStyle("RBody", parent=styles["Normal"], fontSize=10, leading=13, alignment=TA_JUSTIFY))
+
+    styles.add(ParagraphStyle("RName", parent=styles["Title"],
+        fontSize=20, leading=24, textColor=NAVY, spaceAfter=2,
+        alignment=TA_CENTER, fontName="Helvetica-Bold"))
+    styles.add(ParagraphStyle("RContact", parent=styles["Normal"],
+        fontSize=9, leading=12, textColor=LIGHT, alignment=TA_CENTER, spaceAfter=6))
+    styles.add(ParagraphStyle("RSec", parent=styles["Heading2"],
+        fontSize=11, leading=14, textColor=NAVY, spaceBefore=8, spaceAfter=3,
+        fontName="Helvetica-Bold"))
+    styles.add(ParagraphStyle("RCompany", parent=styles["Normal"],
+        fontSize=10, leading=13, textColor=DARK, spaceBefore=6, spaceAfter=1,
+        fontName="Helvetica-Bold"))
+    styles.add(ParagraphStyle("RTitle", parent=styles["Normal"],
+        fontSize=9.5, leading=12, textColor=MED, spaceBefore=1, spaceAfter=2,
+        fontName="Helvetica-Oblique"))
+    styles.add(ParagraphStyle("RBullet", parent=styles["Normal"],
+        fontSize=9.5, leading=12.5, leftIndent=16, bulletIndent=6,
+        spaceBefore=0.5, spaceAfter=0.5, alignment=TA_JUSTIFY))
+    styles.add(ParagraphStyle("RSub", parent=styles["Normal"],
+        fontSize=10, leading=13, textColor=MED, spaceBefore=4, spaceAfter=1,
+        fontName="Helvetica-Bold"))
+    styles.add(ParagraphStyle("RBody", parent=styles["Normal"],
+        fontSize=9.5, leading=12.5, alignment=TA_JUSTIFY))
+    styles.add(ParagraphStyle("RSkills", parent=styles["Normal"],
+        fontSize=9.5, leading=13, alignment=TA_LEFT))
 
     def clean(t):
         t = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", t)
         t = re.sub(r"\*(.*?)\*", r"<i>\1</i>", t)
         return t
 
+    def strip_hashes(s):
+        return re.sub(r"^#{1,6}\s+", "", s)
+
+    # Pre-process: identify sections and collect skills bullets
+    lines = md.split("\n")
     story = []
-    for line in md.split("\n"):
-        s = line.strip()
-        if not s: story.append(Spacer(1, 4))
-        elif s.startswith("# ") and not s.startswith("## "): story.append(Paragraph(clean(s[2:]), styles["RName"]))
-        elif s.startswith("## "):
-            story.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#1a1a2e"), spaceAfter=2, spaceBefore=6))
-            story.append(Paragraph(clean(s[3:].upper()), styles["RSec"]))
-        elif s.startswith("### "): story.append(Paragraph(clean(s[4:]), styles["RSub"]))
-        elif s.startswith("- ") or s.startswith("* "): story.append(Paragraph(clean(s[2:]), styles["RBullet"], bulletText="•"))
-        elif "|" in s or "@" in s: story.append(Paragraph(clean(s), styles["RContact"]))
-        else: story.append(Paragraph(clean(s), styles["RBody"]))
+    i = 0
+    current_section = ""
+
+    while i < len(lines):
+        s = lines[i].strip()
+
+        if not s:
+            story.append(Spacer(1, 2))
+            i += 1
+            continue
+
+        # ── H1: Name ──
+        if re.match(r"^# [^#]", s):
+            story.append(Paragraph(clean(s[2:]), styles["RName"]))
+            i += 1
+            continue
+
+        # ── H2: Section header ──
+        if s.startswith("## "):
+            sec_name = strip_hashes(s).upper()
+            current_section = sec_name
+            story.append(HRFlowable(width="100%", thickness=0.6, color=NAVY,
+                spaceAfter=1, spaceBefore=6))
+            story.append(Paragraph(clean(sec_name), styles["RSec"]))
+            i += 1
+
+            # If this is SKILLS section, collect all following bullets and render inline
+            if "SKILL" in current_section:
+                skills = []
+                while i < len(lines):
+                    ns = lines[i].strip()
+                    if not ns:
+                        i += 1
+                        continue
+                    if ns.startswith("- ") or ns.startswith("* "):
+                        skill_text = ns[2:].strip()
+                        # Handle category: value format (e.g. "Programming & Data: Python, SQL")
+                        skill_text = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", skill_text)
+                        skill_text = re.sub(r"\*(.*?)\*", r"<i>\1</i>", skill_text)
+                        skills.append(skill_text)
+                    elif ns.startswith("#"):
+                        break  # Next section
+                    else:
+                        skill_text = clean(ns)
+                        skills.append(skill_text)
+                        i += 1
+                        continue
+                    i += 1
+
+                if skills:
+                    # Check if skills have category format (contain ":")
+                    has_categories = any(":" in sk and not sk.startswith("<") for sk in skills)
+                    if has_categories:
+                        for sk in skills:
+                            story.append(Paragraph(sk, styles["RSkills"]))
+                            story.append(Spacer(1, 1))
+                    else:
+                        inline = " &nbsp;|&nbsp; ".join(skills)
+                        story.append(Paragraph(inline, styles["RSkills"]))
+            continue
+
+        # ── H3: Sub-section (e.g. role grouping) ──
+        if s.startswith("### "):
+            story.append(Paragraph(clean(strip_hashes(s)), styles["RSub"]))
+            i += 1
+            continue
+
+        # ── H4: Company name ──
+        if s.startswith("#### "):
+            text = strip_hashes(s)
+            # Try to split "Company, Location" on right side
+            story.append(Paragraph(clean(text), styles["RCompany"]))
+            i += 1
+            continue
+
+        # ── H5/H6: Job title ──
+        if s.startswith("##### ") or s.startswith("###### "):
+            text = strip_hashes(s)
+            story.append(Paragraph(clean(text), styles["RTitle"]))
+            i += 1
+            continue
+
+        # ── Bullets ──
+        if s.startswith("- ") or s.startswith("* "):
+            story.append(Paragraph(clean(s[2:]), styles["RBullet"], bulletText="•"))
+            i += 1
+            continue
+
+        # ── Contact line (contains | or @) ──
+        if "|" in s or "@" in s:
+            story.append(Paragraph(clean(s), styles["RContact"]))
+            i += 1
+            continue
+
+        # ── Regular text ──
+        story.append(Paragraph(clean(s), styles["RBody"]))
+        i += 1
+
     doc.build(story)
 
 
