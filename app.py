@@ -13,6 +13,7 @@ import json
 import re
 import os
 import tempfile
+import traceback
 import numpy as np
 
 from bs4 import BeautifulSoup
@@ -29,13 +30,14 @@ from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
 
 
-# ─── Config ───────────────────────────────────────────────────────────────────
+# ─── Config ──────────────────────────────────────────────────────────────────
 LLM_MODEL = "meta-llama/Llama-3.1-70B-Instruct"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 MATCH_THRESHOLD = 50
 
-# ─── Initialize Models ───────────────────────────────────────────────────────
-llm_client = InferenceClient(model=LLM_MODEL)
+# ─── Initialize Models ──────────────────────────────────────────────────────
+hf_token = os.environ.get("HF_TOKEN", "")
+llm_client = InferenceClient(model=LLM_MODEL, token=hf_token)
 embed_model = SentenceTransformer(EMBED_MODEL)
 
 
@@ -49,15 +51,15 @@ def scrape_job_posting(url: str) -> str:
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
+            "Chrome/124.0.0.0 Safari/537.36"
         )
     }
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
+        resp = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
             tag.decompose()
 
         selectors = [
@@ -66,18 +68,22 @@ def scrape_job_posting(url: str) -> str:
             "div.posting-requirements", "div[data-testid='job-description']",
             "div.job-posting", "section.job-description",
             "div#job-description", "div.jobDescriptionContent",
+            "div.show-more-less-html__markup", "div.description__text",
+            "main", "div[role='main']",
         ]
         for sel in selectors:
             el = soup.select_one(sel)
             if el and len(el.get_text(strip=True)) > 200:
-                return el.get_text(separator="\n", strip=True)
+                return el.get_text(separator="\n", strip=True)[:8000]
 
         body = soup.find("body")
         if body:
-            return body.get_text(separator="\n", strip=True)[:8000]
+            text = body.get_text(separator="\n", strip=True)[:8000]
+            if len(text) > 200:
+                return text
         return ""
     except Exception as e:
-        return f"ERROR: Could not scrape URL – {e}"
+        return f"ERROR: Could not scrape URL - {e}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -100,13 +106,6 @@ def extract_resume_text(pdf_path: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def compute_embedding_scores(resume_text: str, job_description: str) -> dict:
-    """
-    Compute semantic similarity between resume and job description
-    using sentence-transformers embeddings.
-
-    Returns:
-        dict with overall_similarity, section_scores, and weak_coverage
-    """
     resume_embedding = embed_model.encode(resume_text, convert_to_tensor=True)
     job_embedding = embed_model.encode(job_description, convert_to_tensor=True)
     overall_sim = float(util.cos_sim(resume_embedding, job_embedding)[0][0])
@@ -123,11 +122,7 @@ def compute_embedding_scores(resume_text: str, job_description: str) -> dict:
     job_chunks = chunk_text(job_description, chunk_size=100)
 
     if not resume_chunks or not job_chunks:
-        return {
-            "overall_similarity": round(overall_sim * 100, 1),
-            "section_scores": [],
-            "weak_coverage": [],
-        }
+        return {"overall_similarity": round(overall_sim * 100, 1), "section_scores": [], "weak_coverage": []}
 
     resume_embeddings = embed_model.encode(resume_chunks, convert_to_tensor=True)
     job_embeddings = embed_model.encode(job_chunks, convert_to_tensor=True)
@@ -137,20 +132,14 @@ def compute_embedding_scores(resume_text: str, job_description: str) -> dict:
     for i, chunk in enumerate(resume_chunks):
         max_sim = float(sim_matrix[i].max())
         preview = chunk[:120] + "..." if len(chunk) > 120 else chunk
-        section_scores.append({
-            "section_preview": preview,
-            "similarity": round(max_sim * 100, 1),
-        })
+        section_scores.append({"section_preview": preview, "similarity": round(max_sim * 100, 1)})
     section_scores.sort(key=lambda x: x["similarity"], reverse=True)
 
     job_coverage = []
     for j, chunk in enumerate(job_chunks):
         max_sim = float(sim_matrix[:, j].max())
         preview = chunk[:120] + "..." if len(chunk) > 120 else chunk
-        job_coverage.append({
-            "requirement_preview": preview,
-            "best_match_score": round(max_sim * 100, 1),
-        })
+        job_coverage.append({"requirement_preview": preview, "best_match_score": round(max_sim * 100, 1)})
     job_coverage.sort(key=lambda x: x["best_match_score"])
     weak_areas = [j for j in job_coverage if j["best_match_score"] < 50]
 
@@ -162,28 +151,30 @@ def compute_embedding_scores(resume_text: str, job_description: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  LLM ANALYSIS (Llama 3.1-70B)
+#  LLM ANALYSIS (Llama 3.1-70B via chat_completion)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def call_llm(prompt: str, max_tokens: int = 3000) -> str:
-    """Call Llama 3.1-70B via HF Inference API."""
-    response = llm_client.text_generation(
-        prompt,
-        max_new_tokens=max_tokens,
+def call_llm(system_msg: str, user_msg: str, max_tokens: int = 3000) -> str:
+    """Call Llama 3.1-70B via HF Inference API using chat_completion."""
+    messages = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": user_msg},
+    ]
+    response = llm_client.chat_completion(
+        messages=messages,
+        max_tokens=max_tokens,
         temperature=0.3,
-        do_sample=True,
-        return_full_text=False,
     )
-    return response.strip()
+    return response.choices[0].message.content.strip()
 
 
 def analyze_keywords(resume_text: str, job_description: str) -> dict:
     """Use LLM to extract and match ATS keywords."""
-
-    prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-You are an expert ATS (Applicant Tracking System) analyst. You respond ONLY with valid JSON. No markdown, no backticks, no explanation.
-<|eot_id|><|start_header_id|>user<|end_header_id|>
-Analyze the resume against the job description.
+    system_msg = (
+        "You are an expert ATS (Applicant Tracking System) analyst. "
+        "You respond ONLY with valid JSON. No markdown, no backticks, no explanation."
+    )
+    user_msg = f"""Analyze the resume against the job description.
 
 INSTRUCTIONS:
 1. Extract the top 15-20 ATS keywords from the job description (hard skills, tools, certifications, methodologies)
@@ -201,13 +192,22 @@ RESUME:
 {resume_text[:3000]}
 
 JOB DESCRIPTION:
-{job_description[:3000]}
-<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-{{"""
+{job_description[:3000]}"""
 
-    raw = "{" + call_llm(prompt, max_tokens=2500)
+    raw = call_llm(system_msg, user_msg, max_tokens=2500)
 
+    # Extract JSON from response
     raw = raw.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+
+    # Find the outermost JSON object
+    start = raw.find("{")
+    if start == -1:
+        raise ValueError(f"No JSON found in LLM response: {raw[:200]}")
+    raw = raw[start:]
+
     brace_count = 0
     end_idx = 0
     for i, ch in enumerate(raw):
@@ -224,20 +224,12 @@ JOB DESCRIPTION:
     return json.loads(raw)
 
 
-def generate_optimized_resume(
-    resume_text: str, job_description: str, analysis: dict
-) -> str:
+def generate_optimized_resume(resume_text: str, job_description: str, analysis: dict) -> str:
     """Use LLM to generate an optimized resume in markdown."""
-
-    keywords_found = [
-        k["keyword"]
-        for k in analysis.get("ats_keywords", [])
-        if k["status"] == "FOUND"
-    ]
+    keywords_found = [k["keyword"] for k in analysis.get("ats_keywords", []) if k["status"] == "FOUND"]
     suggestions = analysis.get("tailoring_suggestions", [])
 
-    prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-You are an expert resume writer specializing in ATS optimization. You write clean, professional resumes in Markdown format.
+    system_msg = """You are an expert resume writer specializing in ATS optimization. You write clean, professional resumes in Markdown format.
 
 CRITICAL RULES:
 - NEVER invent or fabricate any experience, skill, project, or achievement
@@ -249,9 +241,9 @@ CRITICAL RULES:
 - Keep the resume to 1-2 pages of content
 - Start with the candidate name as # heading
 - Use ## for section headers, ### for job titles/schools
-- Use bullet points for achievements
-<|eot_id|><|start_header_id|>user<|end_header_id|>
-Rewrite this resume to better match the target job.
+- Use bullet points for achievements"""
+
+    user_msg = f"""Rewrite this resume to better match the target job.
 
 TARGET: {analysis.get('job_title', 'N/A')} at {analysis.get('company', 'N/A')}
 KEYWORDS TO INCORPORATE: {json.dumps(keywords_found)}
@@ -263,12 +255,9 @@ ORIGINAL RESUME:
 JOB DESCRIPTION (for context):
 {job_description[:2000]}
 
-Generate the optimized resume now in clean Markdown.
-<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-#"""
+Generate the optimized resume now in clean Markdown."""
 
-    result = "#" + call_llm(prompt, max_tokens=3000)
-    return result.strip()
+    return call_llm(system_msg, user_msg, max_tokens=3000)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -278,80 +267,41 @@ Generate the optimized resume now in clean Markdown.
 def markdown_to_pdf(markdown_text: str, output_path: str):
     """Convert optimized resume markdown to a clean PDF."""
     doc = SimpleDocTemplate(
-        output_path,
-        pagesize=letter,
-        topMargin=0.5 * inch,
-        bottomMargin=0.5 * inch,
-        leftMargin=0.6 * inch,
-        rightMargin=0.6 * inch,
+        output_path, pagesize=letter,
+        topMargin=0.5 * inch, bottomMargin=0.5 * inch,
+        leftMargin=0.6 * inch, rightMargin=0.6 * inch,
     )
-
     styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle("ResumeName", parent=styles["Title"], fontSize=18, leading=22, textColor=HexColor("#1a1a2e"), spaceAfter=4, alignment=TA_CENTER))
+    styles.add(ParagraphStyle("ResumeContact", parent=styles["Normal"], fontSize=9, leading=12, textColor=HexColor("#555555"), alignment=TA_CENTER, spaceAfter=10))
+    styles.add(ParagraphStyle("SectionHead", parent=styles["Heading2"], fontSize=12, leading=15, textColor=HexColor("#1a1a2e"), spaceBefore=12, spaceAfter=4))
+    styles.add(ParagraphStyle("BulletItem", parent=styles["Normal"], fontSize=10, leading=13, leftIndent=18, bulletIndent=6, spaceBefore=1, spaceAfter=1, alignment=TA_JUSTIFY))
+    styles.add(ParagraphStyle("SubHead", parent=styles["Normal"], fontSize=10, leading=13, textColor=HexColor("#333333"), spaceBefore=6, spaceAfter=2))
+    styles.add(ParagraphStyle("BodyText2", parent=styles["Normal"], fontSize=10, leading=13, alignment=TA_JUSTIFY))
 
-    styles.add(ParagraphStyle(
-        "ResumeName", parent=styles["Title"],
-        fontSize=18, leading=22, textColor=HexColor("#1a1a2e"),
-        spaceAfter=4, alignment=TA_CENTER,
-    ))
-    styles.add(ParagraphStyle(
-        "ResumeContact", parent=styles["Normal"],
-        fontSize=9, leading=12, textColor=HexColor("#555555"),
-        alignment=TA_CENTER, spaceAfter=10,
-    ))
-    styles.add(ParagraphStyle(
-        "SectionHead", parent=styles["Heading2"],
-        fontSize=12, leading=15, textColor=HexColor("#1a1a2e"),
-        spaceBefore=12, spaceAfter=4,
-    ))
-    styles.add(ParagraphStyle(
-        "BulletItem", parent=styles["Normal"],
-        fontSize=10, leading=13, leftIndent=18, bulletIndent=6,
-        spaceBefore=1, spaceAfter=1, alignment=TA_JUSTIFY,
-    ))
-    styles.add(ParagraphStyle(
-        "SubHead", parent=styles["Normal"],
-        fontSize=10, leading=13, textColor=HexColor("#333333"),
-        spaceBefore=6, spaceAfter=2,
-    ))
-    styles.add(ParagraphStyle(
-        "BodyText2", parent=styles["Normal"],
-        fontSize=10, leading=13, alignment=TA_JUSTIFY,
-    ))
+    def clean_md(t):
+        t = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", t)
+        t = re.sub(r"\*(.*?)\*", r"<i>\1</i>", t)
+        return t
 
     story = []
-    lines = markdown_text.split("\n")
-
-    for line in lines:
+    for line in markdown_text.split("\n"):
         stripped = line.strip()
         if not stripped:
             story.append(Spacer(1, 4))
-            continue
-
-        def clean_md(t):
-            t = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", t)
-            t = re.sub(r"\*(.*?)\*", r"<i>\1</i>", t)
-            return t
-
-        if stripped.startswith("# ") and not stripped.startswith("## "):
+        elif stripped.startswith("# ") and not stripped.startswith("## "):
             story.append(Paragraph(clean_md(stripped[2:].strip()), styles["ResumeName"]))
         elif stripped.startswith("## "):
-            text = stripped[3:].strip().upper()
-            story.append(HRFlowable(
-                width="100%", thickness=0.5,
-                color=HexColor("#1a1a2e"), spaceAfter=2, spaceBefore=6
-            ))
-            story.append(Paragraph(clean_md(text), styles["SectionHead"]))
+            story.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#1a1a2e"), spaceAfter=2, spaceBefore=6))
+            story.append(Paragraph(clean_md(stripped[3:].strip().upper()), styles["SectionHead"]))
         elif stripped.startswith("### "):
             story.append(Paragraph(clean_md(stripped[4:].strip()), styles["SubHead"]))
         elif stripped.startswith("- ") or stripped.startswith("* "):
-            story.append(Paragraph(
-                clean_md(stripped[2:].strip()), styles["BulletItem"], bulletText="•"
-            ))
+            story.append(Paragraph(clean_md(stripped[2:].strip()), styles["BulletItem"], bulletText="•"))
         elif "|" in stripped or "@" in stripped:
             story.append(Paragraph(clean_md(stripped), styles["ResumeContact"]))
         else:
             story.append(Paragraph(clean_md(stripped), styles["BodyText2"]))
-
     doc.build(story)
 
 
@@ -360,11 +310,8 @@ def markdown_to_pdf(markdown_text: str, output_path: str):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def format_analysis_report(analysis: dict, embed_scores: dict) -> tuple:
-    """Format combined LLM + embedding analysis into a readable report."""
     llm_score = analysis.get("match_score", 0)
     embed_score = embed_scores.get("overall_similarity", 0)
-
-    # Hybrid score: 60% keyword match + 40% semantic similarity
     hybrid_score = round(0.6 * llm_score + 0.4 * embed_score, 1)
     rec = analysis.get("recommendation", "N/A")
 
@@ -373,66 +320,56 @@ def format_analysis_report(analysis: dict, embed_scores: dict) -> tuple:
     elif hybrid_score >= MATCH_THRESHOLD and rec == "SKIP":
         rec = "PROCEED"
 
-    if hybrid_score >= 75:
-        indicator = "🟢"
-    elif hybrid_score >= 50:
-        indicator = "🟡"
-    else:
-        indicator = "🔴"
+    indicator = "🟢" if hybrid_score >= 75 else ("🟡" if hybrid_score >= 50 else "🔴")
 
-    report = f"""# 📊 ATS Match Analysis
+    report = f"""## {analysis.get('job_title', 'Job')} at {analysis.get('company', 'Company')}
 
-## {analysis.get('job_title', 'Job')} @ {analysis.get('company', 'Company')}
-
----
-
-### Hybrid Match Score: {indicator} {hybrid_score}%
+### {indicator} Match Score: {hybrid_score}%
 
 | Component | Score | Weight |
 |-----------|-------|--------|
-| 🔑 ATS Keyword Match | {llm_score}% | 60% |
-| 🧠 Semantic Similarity | {embed_score}% | 40% |
+| ATS Keyword Match | {llm_score}% | 60% |
+| Semantic Similarity | {embed_score}% | 40% |
 | **Combined** | **{hybrid_score}%** | |
 
-**Recommendation: {"✅ PROCEED — Optimizing your resume" if rec == "PROCEED" else "⛔ SKIP — This role isn't a good match"}**
+**{"Optimizing your resume..." if rec == "PROCEED" else "This role may not be the best match."}**
 
 {analysis.get('recommendation_reason', '')}
 
 ---
 
-### 🔑 ATS Keywords Scan
+### ATS Keywords
 
 | Keyword | Status |
 |---------|--------|
 """
     for kw in analysis.get("ats_keywords", []):
-        status = "✅" if kw["status"] == "FOUND" else "❌"
-        report += f"| {kw['keyword']} | {status} {kw['status']} |\n"
+        icon = "+" if kw["status"] == "FOUND" else "-"
+        report += f"| {kw['keyword']} | {icon} {kw['status']} |\n"
 
     if analysis.get("strengths"):
-        report += "\n### 💪 Your Strengths\n"
+        report += "\n### Your Strengths\n"
         for s in analysis["strengths"]:
             report += f"- {s}\n"
 
     if analysis.get("critical_gaps"):
-        report += "\n### ⚠️ Critical Gaps\n"
+        report += "\n### Gaps to Address\n"
         for g in analysis["critical_gaps"]:
             report += f"- {g}\n"
 
     if embed_scores.get("section_scores"):
-        report += "\n### 🧠 Semantic Analysis — Strongest Resume Sections\n"
+        report += "\n### Semantic Analysis\n"
         for sec in embed_scores["section_scores"][:3]:
             sim = sec["similarity"]
-            bar = "█" * int(sim / 10) + "░" * (10 - int(sim / 10))
-            report += f"- `{bar}` {sim}% — *{sec['section_preview'][:80]}...*\n"
+            report += f"- {sim}% match — *{sec['section_preview'][:80]}...*\n"
 
     if embed_scores.get("weak_coverage"):
-        report += "\n### 🔍 Job Requirements with Weak Resume Coverage\n"
+        report += "\n### Weak Coverage Areas\n"
         for wk in embed_scores["weak_coverage"]:
-            report += f"- ⚠️ ({wk['best_match_score']}%) *{wk['requirement_preview'][:100]}...*\n"
+            report += f"- {wk['best_match_score']}% — *{wk['requirement_preview'][:100]}...*\n"
 
     if rec == "PROCEED" and analysis.get("tailoring_suggestions"):
-        report += "\n### 🎯 Tailoring Strategy\n"
+        report += "\n### Tailoring Strategy\n"
         for t in analysis["tailoring_suggestions"]:
             report += f"- {t}\n"
 
@@ -445,51 +382,49 @@ def format_analysis_report(analysis: dict, embed_scores: dict) -> tuple:
 
 def process_resume(resume_file, job_url, job_description_manual):
     """Main orchestration function."""
-
     if resume_file is None:
-        yield "❌ Please upload your resume (PDF).", None, None
+        yield "Please upload your resume (PDF).", None, None
         return
 
     job_description = ""
 
-    if job_url and job_url.strip():
-        yield "⏳ Scraping job posting...", None, None
+    # Try manual input first (more reliable), then URL
+    if job_description_manual and job_description_manual.strip() and len(job_description_manual.strip()) > 50:
+        job_description = job_description_manual.strip()
+    elif job_url and job_url.strip():
+        yield "Scraping job posting...", None, None
         job_description = scrape_job_posting(job_url.strip())
         if job_description.startswith("ERROR:"):
-            if job_description_manual and job_description_manual.strip():
-                job_description = job_description_manual.strip()
-            else:
-                yield (
-                    f"❌ {job_description}\n\n"
-                    "**Tip:** Paste the job description manually in the text box below."
-                ), None, None
-                return
-
-    if not job_description or len(job_description) < 100:
-        if job_description_manual and job_description_manual.strip():
-            job_description = job_description_manual.strip()
-        else:
-            yield "❌ Could not get job description. Please paste it manually.", None, None
+            yield f"{job_description}\n\nPaste the job description manually instead.", None, None
             return
 
-    yield "⏳ Reading your resume...", None, None
-    resume_text = extract_resume_text(resume_file.name)
-    if not resume_text or len(resume_text) < 50:
-        yield "❌ Could not extract text from resume. Make sure it's not a scanned image.", None, None
+    if not job_description or len(job_description) < 50:
+        yield "Please paste the job description or provide a valid URL.", None, None
         return
 
-    yield "⏳ Computing semantic similarity (sentence-transformers)...", None, None
+    yield "Reading your resume...", None, None
+    try:
+        resume_text = extract_resume_text(resume_file.name)
+    except Exception as e:
+        yield f"Could not read PDF: {e}", None, None
+        return
+
+    if not resume_text or len(resume_text) < 50:
+        yield "Could not extract text from resume. Make sure it's not a scanned image.", None, None
+        return
+
+    yield "Computing semantic similarity...", None, None
     try:
         embed_scores = compute_embedding_scores(resume_text, job_description)
     except Exception as e:
         embed_scores = {"overall_similarity": 0, "section_scores": [], "weak_coverage": []}
         print(f"Embedding error (non-fatal): {e}")
 
-    yield "⏳ Analyzing ATS keywords (Llama 3.1-70B)...", None, None
+    yield "Analyzing ATS keywords with Llama 3.1-70B...", None, None
     try:
         analysis = analyze_keywords(resume_text, job_description)
     except Exception as e:
-        yield f"❌ LLM analysis failed: {e}", None, None
+        yield f"LLM analysis failed: {e}\n\n```\n{traceback.format_exc()}\n```", None, None
         return
 
     report, hybrid_score, rec = format_analysis_report(analysis, embed_scores)
@@ -498,109 +433,220 @@ def process_resume(resume_file, job_url, job_description_manual):
         yield report, None, None
         return
 
-    yield report + "\n\n⏳ Generating optimized resume...", None, None
+    yield report + "\n\nGenerating optimized resume...", None, None
     try:
         optimized_md = generate_optimized_resume(resume_text, job_description, analysis)
     except Exception as e:
-        yield report + f"\n\n❌ Resume generation failed: {e}", None, None
+        yield report + f"\n\nResume generation failed: {e}", None, None
         return
 
-    yield report + "\n\n⏳ Creating PDF...", None, None
+    yield report + "\n\nCreating PDF...", None, None
     try:
         pdf_path = tempfile.mktemp(suffix=".pdf")
         markdown_to_pdf(optimized_md, pdf_path)
     except Exception as e:
-        yield report + f"\n\n⚠️ PDF generation issue: {e}", optimized_md, None
+        yield report + f"\n\nPDF issue: {e}", optimized_md, None
         return
 
-    final_report = report + "\n\n---\n### ✅ Done! Download your optimized resume below."
-    yield final_report, optimized_md, pdf_path
+    yield report + "\n\n---\n**Done! Download your optimized resume below.**", optimized_md, pdf_path
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  GRADIO UI
+#  GRADIO UI — LinkedIn-inspired design
 # ═══════════════════════════════════════════════════════════════════════════════
 
-with gr.Blocks(
-    title="Resume Optimizer Agent",
-    theme=gr.themes.Soft(
-        primary_hue="blue",
-        secondary_hue="slate",
+CSS = """
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* Global */
+* { font-family: 'Inter', -apple-system, system-ui, sans-serif !important; }
+.gradio-container { max-width: 1060px !important; margin: 0 auto !important; background: #f4f2ee !important; }
+footer { display: none !important; }
+
+/* Header bar */
+.top-bar {
+    background: white;
+    border-bottom: 1px solid #e0dfdc;
+    padding: 12px 24px;
+    margin: -16px -16px 16px -16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.top-bar .logo {
+    width: 34px; height: 34px;
+    background: #0a66c2;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 18px;
+}
+.top-bar h1 { font-size: 1.1rem !important; font-weight: 600 !important; color: #191919 !important; margin: 0 !important; }
+.top-bar p { font-size: 0.78rem; color: #666; margin: 0; }
+
+/* Cards */
+.card {
+    background: white;
+    border: 1px solid #e0dfdc;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 8px;
+}
+.card-header { font-size: 0.95rem; font-weight: 600; color: #191919; margin-bottom: 8px; }
+.card-sub { font-size: 0.78rem; color: #666; margin-bottom: 12px; }
+
+/* Info banner */
+.info-banner {
+    background: #eef3f8;
+    border: 1px solid #d0e0f0;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.82rem;
+    color: #333;
+    margin-bottom: 8px;
+}
+.info-banner strong { color: #0a66c2; }
+
+/* Override Gradio blocks to look like LinkedIn cards */
+.block { background: white !important; border: 1px solid #e0dfdc !important; border-radius: 8px !important; }
+.panel { background: white !important; }
+
+/* Buttons */
+button.primary {
+    background: #0a66c2 !important;
+    border: none !important;
+    border-radius: 20px !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    padding: 10px 24px !important;
+}
+button.primary:hover { background: #004182 !important; }
+
+/* Tabs */
+.tab-nav { background: white !important; border-bottom: 1px solid #e0dfdc !important; border-radius: 8px 8px 0 0 !important; }
+.tab-nav button { color: #666 !important; font-weight: 500 !important; font-size: 0.85rem !important; }
+.tab-nav button.selected { color: #0a66c2 !important; border-bottom-color: #0a66c2 !important; font-weight: 600 !important; }
+
+/* Input styling */
+input, textarea, .wrap { border-color: #e0dfdc !important; border-radius: 6px !important; }
+input:focus, textarea:focus { border-color: #0a66c2 !important; box-shadow: 0 0 0 1px #0a66c2 !important; }
+label, .label-wrap span { color: #191919 !important; font-weight: 500 !important; font-size: 0.85rem !important; }
+
+/* Tables */
+table { border-collapse: collapse !important; }
+table thead th { background: #f8f8f6 !important; color: #191919 !important; font-weight: 600 !important; font-size: 0.82rem !important; border-bottom: 2px solid #e0dfdc !important; }
+table tbody td { color: #333 !important; font-size: 0.82rem !important; background: white !important; border-bottom: 1px solid #f0efec !important; }
+table tbody tr:hover td { background: #f8f8f6 !important; }
+
+/* Markdown */
+.prose, .markdown-text { color: #333 !important; font-size: 0.88rem !important; line-height: 1.5 !important; }
+.prose strong, .markdown-text strong { color: #191919 !important; }
+.prose h2, .markdown-text h2 { color: #191919 !important; font-size: 1.15rem !important; }
+.prose h3, .markdown-text h3 { color: #191919 !important; font-size: 1rem !important; }
+
+/* File upload */
+.upload-button { border-radius: 6px !important; border: 1px dashed #ccc !important; }
+
+/* Footer */
+.ft { text-align: center; font-size: 0.72rem; color: #999; padding: 12px 0 4px; }
+.ft a { color: #0a66c2; text-decoration: none; }
+"""
+
+THEME = gr.themes.Base(
+    primary_hue=gr.themes.Color(
+        c50="#eef3f8", c100="#d0e0f0", c200="#a8c8e8",
+        c300="#70a8d8", c400="#3d8ec8", c500="#0a66c2",
+        c600="#0856a8", c700="#064a8f", c800="#043d75",
+        c900="#03305c", c950="#022244",
     ),
-    css="""
-    .main-header { text-align: center; margin-bottom: 10px; }
-    .main-header h1 { font-size: 2em; margin-bottom: 5px; }
-    .main-header p { color: #666; font-size: 1.1em; }
-    .disclaimer { 
-        background: #fff3cd; padding: 10px; border-radius: 8px; 
-        border-left: 4px solid #ffc107; margin: 10px 0;
-        font-size: 0.9em;
-    }
-    .tech-stack {
-        background: #e8f4f8; padding: 8px 12px; border-radius: 8px;
-        font-size: 0.85em; margin: 5px 0;
-    }
-    """
-) as demo:
+    secondary_hue="slate",
+    neutral_hue="slate",
+    font=("Inter", "-apple-system", "system-ui", "sans-serif"),
+).set(
+    body_background_fill="#f4f2ee",
+    body_background_fill_dark="#f4f2ee",
+    body_text_color="#191919",
+    body_text_color_dark="#191919",
+    block_background_fill="white",
+    block_background_fill_dark="white",
+    block_border_color="#e0dfdc",
+    block_border_color_dark="#e0dfdc",
+    block_label_text_color="#666",
+    block_label_text_color_dark="#666",
+    block_title_text_color="#191919",
+    block_title_text_color_dark="#191919",
+    input_background_fill="white",
+    input_background_fill_dark="white",
+    input_border_color="#e0dfdc",
+    input_border_color_dark="#e0dfdc",
+    button_primary_background_fill="#0a66c2",
+    button_primary_background_fill_dark="#0a66c2",
+    button_primary_background_fill_hover="#004182",
+    button_primary_background_fill_hover_dark="#004182",
+    button_primary_text_color="white",
+    button_primary_text_color_dark="white",
+    border_color_primary="#e0dfdc",
+    border_color_primary_dark="#e0dfdc",
+)
 
+
+with gr.Blocks(theme=THEME, css=CSS, title="ATS Resume Optimizer") as demo:
+
+    # Header
     gr.HTML("""
-    <div class="main-header">
-        <h1>📄 Resume Optimizer Agent</h1>
-        <p>ATS-optimized resumes tailored to specific job postings</p>
-    </div>
-    <div class="tech-stack">
-        🧠 <strong>Powered by:</strong> Llama 3.1-70B (keyword analysis & rewriting) + 
-        Sentence-Transformers (semantic similarity scoring) — fully open source
-    </div>
-    <div class="disclaimer">
-        ⚡ <strong>Honesty guarantee:</strong> This tool will NEVER invent skills or experience. 
-        It only reorganizes and rephrases what's already in your resume to match the job posting.
+    <div class="top-bar">
+        <div class="logo">R</div>
+        <div>
+            <h1>Resume Optimizer</h1>
+            <p>ATS-optimized resumes powered by Llama 3.1-70B + Sentence-Transformers</p>
+        </div>
     </div>
     """)
 
-    with gr.Row():
-        with gr.Column(scale=1):
-            gr.Markdown("### 📤 Your Inputs")
+    gr.HTML("""
+    <div class="info-banner">
+        <strong>How it works:</strong> Upload your resume PDF + paste a job description.
+        We analyze ATS keyword matches (60%) and semantic similarity (40%) to score your fit,
+        then rewrite your resume to maximize your match. <strong>We never invent skills or experience.</strong>
+    </div>
+    """)
+
+    with gr.Row(equal_height=False):
+        # Left column — inputs
+        with gr.Column(scale=1, min_width=320):
             resume_input = gr.File(
-                label="Upload Resume (PDF)",
+                label="Resume (PDF)",
                 file_types=[".pdf"],
                 type="filepath",
             )
-            job_url_input = gr.Textbox(
-                label="Job Posting URL",
-                placeholder="https://careers.example.com/job/12345",
-                info="We'll scrape the job description automatically"
-            )
             job_desc_input = gr.Textbox(
-                label="Or Paste Job Description",
-                placeholder="Paste the full job description here as fallback...",
-                lines=8,
-                info="Used if URL scraping fails or as primary input"
+                label="Job Description",
+                placeholder="Paste the full job description here...",
+                lines=10,
+                info="Copy-paste from the job posting for best results"
             )
-            submit_btn = gr.Button(
-                "🚀 Analyze & Optimize",
-                variant="primary",
-                size="lg",
+            job_url_input = gr.Textbox(
+                label="Or Job URL (optional)",
+                placeholder="https://...",
+                info="We'll try to scrape it — paste text above if this fails"
             )
+            submit_btn = gr.Button("Analyze & Optimize", variant="primary", size="lg")
 
+        # Right column — results
         with gr.Column(scale=2):
-            gr.Markdown("### 📊 Analysis Report")
             report_output = gr.Markdown(
-                value="*Upload your resume and provide a job posting to get started.*"
+                value="Upload your resume and paste a job description to get started."
             )
 
     with gr.Row():
         with gr.Column():
-            gr.Markdown("### 📝 Optimized Resume (Markdown)")
             md_output = gr.Textbox(
-                label="Editable Markdown",
-                lines=20,
+                label="Optimized Resume (Markdown)",
+                lines=18,
                 show_copy_button=True,
                 interactive=True,
             )
         with gr.Column():
-            gr.Markdown("### 📄 Download PDF")
-            pdf_output = gr.File(label="Optimized Resume PDF")
+            pdf_output = gr.File(label="Download Optimized PDF")
 
     submit_btn.click(
         fn=process_resume,
@@ -608,14 +654,13 @@ with gr.Blocks(
         outputs=[report_output, md_output, pdf_output],
     )
 
-    gr.Markdown("""
-    ---
-    <center>
-    Built by <a href="https://danielregaladoumiami.github.io/portfolio/" target="_blank">Daniel Regalado</a> | 
-    Powered by <a href="https://huggingface.co/meta-llama/Llama-3.1-70B-Instruct" target="_blank">Llama 3.1-70B</a> + 
-    <a href="https://www.sbert.net/" target="_blank">Sentence-Transformers</a>
-    </center>
+    gr.HTML("""
+    <div class="ft">
+        Built by <a href="https://danielregaladoumiami.github.io/portfolio/">Daniel Regalado</a> · University of Miami ·
+        <a href="https://github.com/DanielRegaladoUMiami/ats-resume-optimizer">GitHub</a>
+    </div>
     """)
+
 
 if __name__ == "__main__":
     demo.launch()
