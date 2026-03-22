@@ -607,8 +607,30 @@ textarea:focus {
     background: #fff !important;
 }
 
-/* File upload — keep Gradio's default look, just refine */
+/* File upload/download — fix filename visibility on dark bar */
 .file-preview { border-radius: 8px !important; }
+.file-preview .dark\:text-white,
+.file-preview a,
+.file-preview span,
+.file-preview .truncate,
+.file-preview [class*="file"] a,
+.upload-container .file-preview a,
+div[data-testid="file"] a,
+div[data-testid="file"] span.truncate,
+.upload-container a[download],
+.file-preview a[download] {
+    color: #ffffff !important;
+}
+/* File size text */
+.file-preview .text-gray-500,
+.file-preview .text-xs,
+div[data-testid="file"] span:not(.truncate) {
+    color: rgba(255,255,255,0.7) !important;
+}
+/* File icon */
+.file-preview svg {
+    color: #ffffff !important;
+}
 
 /* Accordion */
 .label-wrap { cursor: pointer; }
