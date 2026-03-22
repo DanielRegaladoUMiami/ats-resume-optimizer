@@ -405,23 +405,26 @@ footer { display: none !important; }
 }
 
 /* ── Card groups — white containers with subtle shadow ── */
+.card-group, .card-group.group, .card-group > *, .card-group .block,
+.card-group .gr-group, .card-group .gr-block, .card-group .gr-box,
+.card-group .gr-panel, .card-group .form, .card-group .gr-form {
+    background: #fff !important; border: none !important;
+}
 .card-group {
-    background: #fff !important; border-radius: 12px !important;
+    border-radius: 12px !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
     padding: 4px 28px 20px !important; margin-bottom: 12px !important;
-    border: none !important;
+}
+/* Force all text inside cards to be visible */
+.card-group label, .card-group span, .card-group p, .card-group div {
+    color: inherit;
 }
 
 /* ── Hero header ── */
 .hero {
     background: linear-gradient(135deg, #0a66c2 0%, #004182 100%);
     border-radius: 12px; padding: 32px 32px 28px;
-    margin-bottom: 12px; color: white; position: relative; overflow: hidden;
-}
-.hero::after {
-    content: ''; position: absolute; top: -40px; right: -40px;
-    width: 160px; height: 160px; border-radius: 50%;
-    background: rgba(255,255,255,0.06);
+    margin-bottom: 12px; color: white;
 }
 .hero h1 {
     font-size: 1.5rem !important; font-weight: 700 !important;
@@ -440,9 +443,10 @@ footer { display: none !important; }
 
 /* ── Section titles ── */
 .sec-title {
-    font-size: 0.78rem; font-weight: 600; color: #666;
-    text-transform: uppercase; letter-spacing: 0.06em;
-    margin: 0 0 14px; padding: 0;
+    font-size: 0.73rem !important; font-weight: 600 !important; color: #888 !important;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin: 0 0 10px !important; padding: 0;
+    background: transparent !important;
 }
 
 /* ── Labels ── */
@@ -452,18 +456,16 @@ label, .label-wrap, .label-wrap span, span[data-testid="block-label"] {
 }
 
 /* ── File upload — compact ── */
-.upload-button, .gr-file-upload {
-    border: 2px dashed #d4d4d4 !important; border-radius: 10px !important;
-    background: #fafafa !important; min-height: 0 !important;
+.upload-button, .gr-file-upload, .card-group .upload-button {
+    border: 2px dashed #ccc !important; border-radius: 10px !important;
+    background: #f9f9f7 !important; min-height: 0 !important;
     padding: 16px !important;
 }
-.file-preview { background: #fafafa !important; border-radius: 10px !important; }
-/* Shrink the upload zone height */
-.gr-file, .gr-file-upload, [data-testid="file"] {
-    max-height: 110px !important; min-height: 0 !important;
-}
-.gr-file .wrap, .gr-file-upload .wrap {
-    min-height: 0 !important; padding: 12px !important;
+.file-preview { background: #f9f9f7 !important; border-radius: 10px !important; }
+/* Upload text visibility */
+.card-group .upload-button span, .card-group .upload-button p,
+.upload-button span, .upload-button p {
+    color: #666 !important;
 }
 
 /* ── Inputs ── */
