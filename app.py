@@ -607,29 +607,53 @@ textarea:focus {
     background: #fff !important;
 }
 
-/* File upload/download — fix filename visibility on dark bar */
-.file-preview { border-radius: 8px !important; }
-.file-preview .dark\:text-white,
-.file-preview a,
-.file-preview span,
-.file-preview .truncate,
-.file-preview [class*="file"] a,
-.upload-container .file-preview a,
-div[data-testid="file"] a,
-div[data-testid="file"] span.truncate,
-.upload-container a[download],
-.file-preview a[download] {
-    color: #ffffff !important;
+/* File upload/download — force light appearance on file components */
+/* Override Gradio dark-mode file bar: light background + dark text */
+.file-preview,
+.dark .file-preview,
+[class*="file-pil"],
+.dark [class*="file-pil"],
+[class*="file-container"],
+.dark [class*="file-container"],
+.dark [class*="file-preview"] {
+    background: #f0f0f0 !important;
+    background-color: #f0f0f0 !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 8px !important;
 }
-/* File size text */
-.file-preview .text-gray-500,
-.file-preview .text-xs,
-div[data-testid="file"] span:not(.truncate) {
-    color: rgba(255,255,255,0.7) !important;
+/* File name text — dark on light background */
+[class*="file-name"],
+[class*="file-link"],
+.dark [class*="file-name"],
+.dark [class*="file-link"],
+.file-preview a,
+.dark .file-preview a,
+[class*="file-container"] a,
+.dark [class*="file-container"] a,
+[class*="file-pil"] a,
+.dark [class*="file-pil"] a {
+    color: #191919 !important;
+}
+/* File size and subdued text */
+[class*="file-size"],
+.dark [class*="file-size"],
+.file-preview span,
+.dark .file-preview span,
+[class*="file-container"] span,
+.dark [class*="file-container"] span {
+    color: #555 !important;
 }
 /* File icon */
-.file-preview svg {
-    color: #ffffff !important;
+[class*="file-icon"] svg,
+.dark [class*="file-icon"] svg,
+.file-preview svg,
+.dark .file-preview svg {
+    color: #333 !important;
+}
+/* Dropzone / upload area — also force light */
+.dark [class*="upload-text"],
+.dark [class*="drop-text"] {
+    color: #555 !important;
 }
 
 /* Accordion */
