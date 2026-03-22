@@ -383,240 +383,158 @@ def process_resume(resume_file, job_url, job_desc_manual):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  GRADIO UI — Clean professional design
+#  GRADIO UI — Polished single-column
 # ═════════════════════════════════════════════════════════════════════════════
 
 CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-* { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+* { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
 
-/* ── Layout ── */
+/* Layout */
 .gradio-container {
-    max-width: 720px !important; margin: 0 auto !important;
-    background: #f3f2ef !important; padding-top: 0 !important;
+    max-width: 680px !important; margin: 0 auto !important;
+    background: #f3f2ef !important;
 }
 footer { display: none !important; }
-.gap { gap: 0 !important; }
 
-/* ── Remove ALL default Gradio block borders & shadows ── */
-.block, .gr-block, .gr-box, .gr-panel, .gr-form {
-    border: none !important; box-shadow: none !important;
-    border-radius: 0 !important; background: transparent !important;
-}
-
-/* ── Card groups — white containers with subtle shadow ── */
-.card-group, .card-group.group, .card-group > *, .card-group .block,
-.card-group .gr-group, .card-group .gr-block, .card-group .gr-box,
-.card-group .gr-panel, .card-group .form, .card-group .gr-form {
-    background: #fff !important; border: none !important;
-}
-.card-group {
-    border-radius: 12px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
-    padding: 4px 28px 20px !important; margin-bottom: 12px !important;
-}
-/* Force all text inside cards to be visible */
-.card-group label, .card-group span, .card-group p, .card-group div {
-    color: inherit;
-}
-
-/* ── Hero header ── */
+/* Hero */
 .hero {
-    background: linear-gradient(135deg, #0a66c2 0%, #004182 100%);
-    border-radius: 12px; padding: 32px 32px 28px;
-    margin-bottom: 12px; color: white;
+    background: linear-gradient(135deg, #0a66c2, #004182);
+    border-radius: 12px; padding: 28px 28px 24px; margin-bottom: 16px; color: #fff;
 }
-.hero h1 {
-    font-size: 1.5rem !important; font-weight: 700 !important;
-    color: white !important; margin: 0 0 6px !important; letter-spacing: -0.02em;
-}
-.hero p {
-    font-size: 0.85rem; color: rgba(255,255,255,0.85); margin: 0;
-    font-weight: 400; line-height: 1.5;
-}
-.hero .badge {
-    display: inline-block; background: rgba(255,255,255,0.15);
-    border-radius: 20px; padding: 4px 12px; font-size: 0.72rem;
-    font-weight: 500; color: rgba(255,255,255,0.9); margin-top: 12px;
-    backdrop-filter: blur(4px);
+.hero h1 { font-size: 1.4rem; font-weight: 700; margin: 0 0 6px; color: #fff !important; }
+.hero p  { font-size: 0.82rem; color: rgba(255,255,255,.82); margin: 0; line-height: 1.55; }
+.hero .tag {
+    display: inline-block; margin-top: 10px; padding: 3px 10px;
+    font-size: 0.7rem; font-weight: 500; color: rgba(255,255,255,.88);
+    background: rgba(255,255,255,.13); border-radius: 16px;
 }
 
-/* ── Section titles ── */
-.sec-title {
-    font-size: 0.73rem !important; font-weight: 600 !important; color: #888 !important;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    margin: 0 0 10px !important; padding: 0;
-    background: transparent !important;
-}
-
-/* ── Labels ── */
-label, .label-wrap, .label-wrap span, span[data-testid="block-label"] {
-    color: #333 !important; font-weight: 600 !important; font-size: 0.82rem !important;
-    background: transparent !important; letter-spacing: -0.01em;
-}
-
-/* ── File upload — compact ── */
-.upload-button, .gr-file-upload, .card-group .upload-button {
-    border: 2px dashed #ccc !important; border-radius: 10px !important;
-    background: #f9f9f7 !important; min-height: 0 !important;
-    padding: 16px !important;
-}
-.file-preview { background: #f9f9f7 !important; border-radius: 10px !important; }
-/* Upload text visibility */
-.card-group .upload-button span, .card-group .upload-button p,
-.upload-button span, .upload-button p {
-    color: #666 !important;
-}
-
-/* ── Inputs ── */
-input, textarea {
-    border: 1.5px solid #e0e0e0 !important; border-radius: 10px !important;
-    background: #fafafa !important; color: #191919 !important;
-    font-size: 0.88rem !important; padding: 10px 14px !important;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-input:focus, textarea:focus {
-    border-color: #0a66c2 !important;
-    box-shadow: 0 0 0 3px rgba(10,102,194,0.1) !important;
-    background: #fff !important;
-}
-textarea { min-height: 100px !important; resize: vertical !important; }
-
-/* ── Primary button ── */
+/* Button — pill, NOT full-width */
 button.primary {
     background: #0a66c2 !important; border: none !important;
-    border-radius: 28px !important; font-weight: 600 !important;
-    padding: 14px 40px !important; font-size: 0.92rem !important;
-    letter-spacing: 0.01em; transition: all 0.2s ease;
-    box-shadow: 0 2px 8px rgba(10,102,194,0.25) !important;
+    border-radius: 24px !important; font-weight: 600 !important;
+    font-size: 0.9rem !important; padding: 12px 48px !important;
+    box-shadow: 0 2px 8px rgba(10,102,194,.25) !important;
+    max-width: 260px !important; width: auto !important;
+    display: block !important; margin: 0 auto 16px !important;
 }
 button.primary:hover {
     background: #004182 !important;
-    box-shadow: 0 4px 14px rgba(10,102,194,0.35) !important;
-    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(10,102,194,.35) !important;
 }
 
-/* ── Accordion ── */
-.label-wrap {
-    cursor: pointer; padding: 10px 0 !important;
-    border: none !important; background: transparent !important;
+/* Labels */
+label, span[data-testid="block-label"] {
+    color: #333 !important; font-weight: 600 !important;
+    font-size: 0.82rem !important; background: transparent !important;
 }
-.label-wrap span {
-    color: #0a66c2 !important; font-weight: 500 !important; font-size: 0.84rem !important;
+.label-wrap span { background: transparent !important; }
+
+/* Inputs */
+textarea {
+    border: 1.5px solid #ddd !important; border-radius: 8px !important;
+    background: #fafafa !important; color: #191919 !important;
+    font-size: 0.86rem !important;
+}
+textarea:focus {
+    border-color: #0a66c2 !important;
+    box-shadow: 0 0 0 3px rgba(10,102,194,.08) !important;
+    background: #fff !important;
 }
 
-/* ── Tables ── */
-table { border-collapse: separate !important; border-spacing: 0 !important; width: 100% !important; font-size: 0.84rem !important; table-layout: auto !important; }
-table thead th {
-    background: #f8f7f4 !important; color: #555 !important; font-weight: 600 !important;
-    padding: 10px 14px !important; border-bottom: 2px solid #e8e7e4 !important;
-    font-size: 0.76rem !important; text-transform: uppercase; letter-spacing: 0.04em;
-    white-space: nowrap !important;
-}
-table tbody td {
-    color: #333 !important; padding: 9px 14px !important;
-    background: white !important; border-bottom: 1px solid #f0efec !important;
-    white-space: normal !important; word-break: normal !important;
-}
-table tbody tr:last-child td { border-bottom: none !important; }
+/* File upload — keep Gradio's default look, just refine */
+.file-preview { border-radius: 8px !important; }
 
-/* ── Copy button styling ── */
-.copy-btn, button[title="Copy"] {
-    background: #0a66c2 !important; color: white !important;
-    border-radius: 6px !important; font-size: 0.78rem !important;
+/* Accordion */
+.label-wrap { cursor: pointer; }
+.label-wrap span { color: #0a66c2 !important; font-weight: 500 !important; font-size: 0.84rem !important; }
+
+/* Tables */
+table { width: 100% !important; font-size: 0.84rem !important; border-collapse: collapse !important; }
+table th {
+    background: #f7f6f3 !important; color: #555 !important; font-weight: 600 !important;
+    padding: 8px 12px !important; font-size: 0.75rem !important;
+    text-transform: uppercase; letter-spacing: .04em;
+    border-bottom: 2px solid #e8e7e4 !important; white-space: nowrap !important;
+}
+table td {
+    padding: 8px 12px !important; color: #333 !important;
+    border-bottom: 1px solid #f0efec !important;
 }
 
-/* ── File download ── */
-.file-preview a { color: #0a66c2 !important; font-weight: 500 !important; }
-
-/* ── Markdown report ── */
-.prose, .markdown-text { color: #333 !important; font-size: 0.88rem !important; line-height: 1.65 !important; }
+/* Markdown report */
+.prose, .markdown-text { color: #333 !important; font-size: 0.86rem !important; line-height: 1.6 !important; }
+.prose h2 { color: #191919 !important; font-size: 1.02rem !important; font-weight: 700 !important; margin-top: 18px !important; padding-bottom: 6px; border-bottom: 2px solid #f0efec; }
+.prose h3 { color: #333 !important; font-size: 0.9rem !important; font-weight: 600 !important; margin-top: 14px !important; }
 .prose strong { color: #191919 !important; }
-.prose h2 {
-    color: #191919 !important; font-size: 1.05rem !important; font-weight: 700 !important;
-    margin-top: 20px !important; padding-bottom: 8px;
-    border-bottom: 2px solid #f0efec;
-}
-.prose h3 {
-    color: #333 !important; font-size: 0.92rem !important; font-weight: 600 !important;
-    margin-top: 16px !important;
-}
-.prose hr { border-color: #eee !important; margin: 16px 0 !important; }
+.prose hr { border-color: #eee !important; margin: 14px 0 !important; }
 
-/* ── Footer ── */
-.ft {
-    text-align: center; font-size: 0.72rem; color: #aaa;
-    padding: 20px 0 8px; letter-spacing: 0.01em;
-}
+/* Footer */
+.ft { text-align: center; font-size: 0.7rem; color: #aaa; padding: 16px 0 4px; }
 .ft a { color: #0a66c2; text-decoration: none; font-weight: 500; }
-.ft a:hover { text-decoration: underline; }
-
-/* ── Responsive ── */
-@media (max-width: 640px) {
-    .card { padding: 18px 16px; }
-    .hero { padding: 24px 20px 20px; }
-    .hero h1 { font-size: 1.25rem !important; }
-}
 """
 
-THEME = gr.themes.Soft(
-    primary_hue=gr.themes.Color(c50="#eef3f8", c100="#d0e0f0", c200="#a8c8e8", c300="#70a8d8", c400="#3d8ec8", c500="#0a66c2", c600="#0856a8", c700="#064a8f", c800="#043d75", c900="#03305c", c950="#022244"),
-    secondary_hue="slate", neutral_hue="slate",
-    font=("Inter", "-apple-system", "BlinkMacSystemFont", "sans-serif"),
+THEME = gr.themes.Default(
+    primary_hue=gr.themes.Color(c50="#eef3f8", c100="#d0e0f0", c200="#a8c8e8",
+        c300="#70a8d8", c400="#3d8ec8", c500="#0a66c2", c600="#0856a8",
+        c700="#064a8f", c800="#043d75", c900="#03305c", c950="#022244"),
+    neutral_hue="gray",
+    font=("Inter", "system-ui", "sans-serif"),
 ).set(
-    body_background_fill="#f3f2ef", body_background_fill_dark="#f3f2ef",
-    body_text_color="#191919", body_text_color_dark="#191919",
-    block_background_fill="transparent", block_background_fill_dark="transparent",
-    block_border_width="0", block_border_width_dark="0",
-    block_shadow="none", block_shadow_dark="none",
-    block_label_text_color="#333", block_label_text_color_dark="#333",
-    block_label_background_fill="transparent", block_label_background_fill_dark="transparent",
-    input_background_fill="#fafafa", input_background_fill_dark="#fafafa",
-    input_border_color="#e0e0e0", input_border_color_dark="#e0e0e0",
-    button_primary_background_fill="#0a66c2", button_primary_background_fill_dark="#0a66c2",
-    button_primary_background_fill_hover="#004182", button_primary_background_fill_hover_dark="#004182",
-    button_primary_text_color="white", button_primary_text_color_dark="white",
-    shadow_drop="none", shadow_drop_lg="none",
+    body_background_fill="#f3f2ef",
+    body_text_color="#191919",
+    block_background_fill="white",
+    block_border_color="#e8e7e4",
+    block_border_width="1px",
+    block_shadow="0 1px 2px rgba(0,0,0,.06)",
+    block_radius="10px",
+    block_label_text_color="#333",
+    block_label_background_fill="transparent",
+    input_background_fill="#fafafa",
+    input_border_color="#ddd",
+    button_primary_background_fill="#0a66c2",
+    button_primary_text_color="white",
 )
 
 
 with gr.Blocks(theme=THEME, css=CSS, title="ATS Resume Optimizer") as demo:
 
-    # ── Hero header ──
-    gr.HTML("""
-    <div class="hero">
+    # Hero
+    gr.HTML("""<div class="hero">
         <h1>Resume Optimizer</h1>
-        <p>Upload your resume and a job description. We analyze ATS keyword match
-        and semantic similarity, then rewrite your resume to maximize compatibility.
+        <p>Upload your resume and paste a job description. We score keyword match
+        and semantic similarity, then rewrite your resume to maximize ATS compatibility.
         We never invent skills or experience.</p>
-        <span class="badge">Llama 3.1-70B + Sentence-Transformers</span>
-    </div>
-    """)
+        <span class="tag">Powered by Llama 3.1-70B + Sentence-Transformers</span>
+    </div>""")
 
-    # ── Input section ──
-    with gr.Group(elem_classes=["card-group"]):
-        gr.HTML('<div class="sec-title" style="padding:24px 28px 0">Input</div>')
-        with gr.Row(equal_height=False):
-            with gr.Column(scale=1, min_width=200):
-                resume_input = gr.File(label="Resume PDF", file_types=[".pdf"], type="filepath")
-            with gr.Column(scale=2, min_width=300):
-                job_desc_input = gr.Textbox(label="Job Description", placeholder="Paste the full job description here...", lines=5, max_lines=12)
-        with gr.Accordion("Or enter a job URL", open=False):
-            job_url_input = gr.Textbox(label="Job Posting URL", placeholder="https://careers.example.com/job/12345", lines=1)
+    # Resume upload — full width, its own block
+    resume_input = gr.File(label="Upload Resume (PDF)", file_types=[".pdf"], type="filepath")
 
-    # ── Button ──
-    submit_btn = gr.Button("Analyze & Optimize", variant="primary", size="lg")
+    # Job description — full width below
+    job_desc_input = gr.Textbox(
+        label="Job Description",
+        placeholder="Paste the full job description here...",
+        lines=6, max_lines=20,
+    )
 
-    # ── Results section ──
-    with gr.Group(elem_classes=["card-group"]):
-        gr.HTML('<div class="sec-title" style="padding:24px 28px 0">Analysis</div>')
-        report_output = gr.Markdown(value="Your analysis will appear here once you submit.")
+    # Hidden: job URL (user said it doesn't work, keep as hidden fallback)
+    job_url_input = gr.Textbox(visible=False, value="")
 
-    # ── Optimized Resume section ──
-    with gr.Group(elem_classes=["card-group"]):
-        with gr.Accordion("Optimized Resume", open=False):
-            md_output = gr.Textbox(label="Optimized Resume (editable)", lines=16, show_copy_button=True, interactive=True)
-            pdf_output = gr.File(label="Download PDF", visible=True)
+    # Button — compact pill
+    submit_btn = gr.Button("Analyze & Optimize", variant="primary")
+
+    # Results
+    report_output = gr.Markdown(value="", elem_id="report")
+
+    # Optimized resume
+    with gr.Accordion("Optimized Resume", open=False, visible=True):
+        md_output = gr.Textbox(
+            label="Markdown (editable)",
+            lines=16, show_copy_button=True, interactive=True,
+        )
+        pdf_output = gr.File(label="Download PDF")
 
     submit_btn.click(
         fn=process_resume,
