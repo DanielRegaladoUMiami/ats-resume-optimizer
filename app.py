@@ -252,18 +252,33 @@ def format_report(analysis: dict, embed: dict) -> str:
 
 ### ATS Keywords
 
-| Keyword | Status | Evidence |
-|---|---|---|
 """
-    for kw in analysis.get("ats_keywords", []):
-        st = kw.get("status", "MISSING")
-        icon = {"FOUND": "FOUND", "PARTIAL": "PARTIAL", "MISSING": "MISSING"}.get(st, st)
-        ev = kw.get("evidence") or kw.get("resume_evidence") or ""
-        if ev and ev != "null":
-            ev = ev[:60]
-        else:
-            ev = ""
-        r += f"| {kw['keyword']} | {icon} | {ev} |\n"
+    # Use a list format instead of table to avoid column-width issues
+    found_kws = [kw for kw in analysis.get("ats_keywords", []) if kw.get("status") == "FOUND"]
+    partial_kws = [kw for kw in analysis.get("ats_keywords", []) if kw.get("status") == "PARTIAL"]
+    missing_kws = [kw for kw in analysis.get("ats_keywords", []) if kw.get("status") == "MISSING"]
+
+    if found_kws:
+        r += "**Found:**\n"
+        for kw in found_kws:
+            ev = kw.get("evidence") or kw.get("resume_evidence") or ""
+            ev = f" — *{ev[:55]}*" if ev and ev != "null" else ""
+            r += f"- {kw['keyword']}{ev}\n"
+        r += "\n"
+
+    if partial_kws:
+        r += "**Partial Match:**\n"
+        for kw in partial_kws:
+            ev = kw.get("evidence") or kw.get("resume_evidence") or ""
+            ev = f" — *{ev[:55]}*" if ev and ev != "null" else ""
+            r += f"- {kw['keyword']}{ev}\n"
+        r += "\n"
+
+    if missing_kws:
+        r += "**Missing:**\n"
+        for kw in missing_kws:
+            r += f"- {kw['keyword']}\n"
+        r += "\n"
 
     if analysis.get("strengths"):
         r += "\n### Strengths\n"
@@ -389,13 +404,13 @@ footer { display: none !important; }
     border-radius: 0 !important; background: transparent !important;
 }
 
-/* ── Cards — white containers with subtle shadow ── */
-.card {
-    background: #fff; border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    padding: 28px 32px; margin-bottom: 12px;
+/* ── Card groups — white containers with subtle shadow ── */
+.card-group {
+    background: #fff !important; border-radius: 12px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+    padding: 4px 28px 20px !important; margin-bottom: 12px !important;
+    border: none !important;
 }
-.card-tight { padding: 20px 28px; }
 
 /* ── Hero header ── */
 .hero {
@@ -489,17 +504,28 @@ button.primary:hover {
 }
 
 /* ── Tables ── */
-table { border-collapse: separate !important; border-spacing: 0 !important; width: 100% !important; font-size: 0.82rem !important; }
+table { border-collapse: separate !important; border-spacing: 0 !important; width: 100% !important; font-size: 0.84rem !important; table-layout: auto !important; }
 table thead th {
     background: #f8f7f4 !important; color: #555 !important; font-weight: 600 !important;
     padding: 10px 14px !important; border-bottom: 2px solid #e8e7e4 !important;
-    font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.04em;
+    font-size: 0.76rem !important; text-transform: uppercase; letter-spacing: 0.04em;
+    white-space: nowrap !important;
 }
 table tbody td {
     color: #333 !important; padding: 9px 14px !important;
     background: white !important; border-bottom: 1px solid #f0efec !important;
+    white-space: normal !important; word-break: normal !important;
 }
 table tbody tr:last-child td { border-bottom: none !important; }
+
+/* ── Copy button styling ── */
+.copy-btn, button[title="Copy"] {
+    background: #0a66c2 !important; color: white !important;
+    border-radius: 6px !important; font-size: 0.78rem !important;
+}
+
+/* ── File download ── */
+.file-preview a { color: #0a66c2 !important; font-weight: 500 !important; }
 
 /* ── Markdown report ── */
 .prose, .markdown-text { color: #333 !important; font-size: 0.88rem !important; line-height: 1.65 !important; }
@@ -565,36 +591,30 @@ with gr.Blocks(theme=THEME, css=CSS, title="ATS Resume Optimizer") as demo:
     </div>
     """)
 
-    # ── Input section inside a card ──
-    gr.HTML('<div class="card">')
-    gr.HTML('<div class="sec-title">Input</div>')
-
-    with gr.Row(equal_height=False):
-        with gr.Column(scale=1, min_width=200):
-            resume_input = gr.File(label="Resume PDF", file_types=[".pdf"], type="filepath")
-        with gr.Column(scale=2, min_width=300):
-            job_desc_input = gr.Textbox(label="Job Description", placeholder="Paste the full job description here...", lines=5, max_lines=12)
-
-    with gr.Accordion("Or enter a job URL", open=False):
-        job_url_input = gr.Textbox(label="Job Posting URL", placeholder="https://careers.example.com/job/12345", lines=1)
-
-    gr.HTML('</div>')
+    # ── Input section ──
+    with gr.Group(elem_classes=["card-group"]):
+        gr.HTML('<div class="sec-title" style="padding:24px 28px 0">Input</div>')
+        with gr.Row(equal_height=False):
+            with gr.Column(scale=1, min_width=200):
+                resume_input = gr.File(label="Resume PDF", file_types=[".pdf"], type="filepath")
+            with gr.Column(scale=2, min_width=300):
+                job_desc_input = gr.Textbox(label="Job Description", placeholder="Paste the full job description here...", lines=5, max_lines=12)
+        with gr.Accordion("Or enter a job URL", open=False):
+            job_url_input = gr.Textbox(label="Job Posting URL", placeholder="https://careers.example.com/job/12345", lines=1)
 
     # ── Button ──
     submit_btn = gr.Button("Analyze & Optimize", variant="primary", size="lg")
 
-    # ── Results card ──
-    gr.HTML('<div class="card">')
-    gr.HTML('<div class="sec-title">Analysis</div>')
-    report_output = gr.Markdown(value="Your analysis will appear here once you submit.")
-    gr.HTML('</div>')
+    # ── Results section ──
+    with gr.Group(elem_classes=["card-group"]):
+        gr.HTML('<div class="sec-title" style="padding:24px 28px 0">Analysis</div>')
+        report_output = gr.Markdown(value="Your analysis will appear here once you submit.")
 
-    # ── Optimized Resume card ──
-    gr.HTML('<div class="card card-tight">')
-    with gr.Accordion("Optimized Resume", open=False):
-        md_output = gr.Textbox(label="Markdown (editable)", lines=14, show_copy_button=True, interactive=True)
-        pdf_output = gr.File(label="Download PDF")
-    gr.HTML('</div>')
+    # ── Optimized Resume section ──
+    with gr.Group(elem_classes=["card-group"]):
+        with gr.Accordion("Optimized Resume", open=False):
+            md_output = gr.Textbox(label="Optimized Resume (editable)", lines=16, show_copy_button=True, interactive=True)
+            pdf_output = gr.File(label="Download PDF", visible=True)
 
     submit_btn.click(
         fn=process_resume,
